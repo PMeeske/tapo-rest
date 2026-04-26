@@ -19,6 +19,7 @@ use self::logger::Logger;
 mod cmd;
 mod config;
 mod devices;
+mod discovery;
 mod logger;
 mod server;
 
@@ -38,6 +39,8 @@ async fn inner_main() -> Result<()> {
         config_path,
         port,
         verbosity,
+        discovery_interval_secs,
+        discovery_timeout_secs,
     } = Cmd::parse();
 
     // Set up the logger
@@ -61,7 +64,45 @@ async fn inner_main() -> Result<()> {
         );
     }
 
+    let cache_path = data_dir.join("tapo_devices.json");
+
+    // Pre-read the config so we can run an initial Tapo LAN discovery before
+    // `server::serve` boots the device loader (which depends on the cache).
+    // Loader.rs still owns the canonical parse — this is just a peek.
+    let config_str = fs::read_to_string(&config_path)
+        .await
+        .context("Failed to read the devices configuration file for initial discovery")?;
+    let initial_config = serde_json::from_str::<config::Config>(&config_str)
+        .context("Failed to parse the devices configuration file for initial discovery")?;
+    let initial_credentials = initial_config.tapo_credentials.clone();
+    let initial_broadcast = initial_config.discovery_broadcast.clone();
+    drop(initial_config);
+
+    info!(
+        "Running initial Tapo LAN discovery on {initial_broadcast} (cache at {})...",
+        cache_path.display()
+    );
+    let initial_cache = discovery::discover_and_cache(
+        &initial_credentials,
+        &initial_broadcast,
+        discovery_timeout_secs,
+        &cache_path,
+    )
+    .await;
+    info!(
+        "Initial Tapo discovery complete: {} cached device(s)",
+        initial_cache.devices.len()
+    );
+
     info!("Now launching server...");
 
-    server::serve(port, config_path, data_dir.join("sessions.json")).await
+    server::serve(
+        port,
+        config_path,
+        data_dir.join("sessions.json"),
+        cache_path,
+        std::time::Duration::from_secs(discovery_interval_secs),
+        discovery_timeout_secs,
+    )
+    .await
 }
