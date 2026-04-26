@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use axum::{
@@ -28,7 +28,14 @@ pub use errors::{ApiError, ApiResult};
 
 pub type SharedState = Arc<StateData>;
 
-pub async fn serve(port: u16, config_path: PathBuf, sessions_file: PathBuf) -> Result<()> {
+pub async fn serve(
+    port: u16,
+    config_path: PathBuf,
+    sessions_file: PathBuf,
+    cache_path: PathBuf,
+    discovery_interval: Duration,
+    discovery_timeout_secs: u64,
+) -> Result<()> {
     let cors = CorsLayer::new()
         .allow_methods(AllowMethods::any())
         .allow_headers(AllowHeaders::any())
@@ -39,7 +46,16 @@ pub async fn serve(port: u16, config_path: PathBuf, sessions_file: PathBuf) -> R
 
     let (actions_router, actions_route_uris) = make_actions_router();
 
-    let state = Arc::new(StateData::init(config_path, sessions_file).await?);
+    let state = Arc::new(
+        StateData::init(
+            config_path,
+            sessions_file,
+            cache_path,
+            discovery_interval,
+            discovery_timeout_secs,
+        )
+        .await?,
+    );
 
     let app = Router::new()
         // Reload the configuration file
