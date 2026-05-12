@@ -12,7 +12,10 @@ use log::info;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
-use crate::{config::TapoConnectionInfos, server::actions::make_actions_router};
+use crate::{
+    config::{TapoConnectionInfos, cors_origins},
+    server::actions::make_actions_router,
+};
 
 use self::{auth::auth_middleware, sessions::refresh_session, state::StateData};
 
@@ -36,13 +39,20 @@ pub async fn serve(
     discovery_interval: Duration,
     discovery_timeout_secs: u64,
 ) -> Result<()> {
+    // SEC-01 / E-4: origin allowlist; methods/headers intentionally broad pending follow-up audit.
+    let origins = cors_origins();
+    info!(
+        "CORS origin allowlist: {}",
+        origins
+            .iter()
+            .map(|h| h.to_str().unwrap_or("<non-utf8>").to_owned())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     let cors = CorsLayer::new()
         .allow_methods(AllowMethods::any())
         .allow_headers(AllowHeaders::any())
-        .allow_origin(
-            // TODO: make this configurable
-            AllowOrigin::any(),
-        );
+        .allow_origin(AllowOrigin::list(origins));
 
     let (actions_router, actions_route_uris) = make_actions_router();
 
