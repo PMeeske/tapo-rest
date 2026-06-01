@@ -14,14 +14,12 @@ use tokio::fs;
 
 use crate::cmd::Cmd;
 
-use self::logger::Logger;
-
 mod cmd;
 mod config;
 mod devices;
 mod discovery;
-mod logger;
 mod server;
+mod telemetry;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -43,8 +41,12 @@ async fn inner_main() -> Result<()> {
         discovery_timeout_secs,
     } = Cmd::parse();
 
-    // Set up the logger
-    Logger::new(verbosity).init().unwrap();
+    // Set up logging + (optional) OpenTelemetry tracing. This is fail-open:
+    // with `OTEL_EXPORTER_OTLP_ENDPOINT` unset it installs a plain colored
+    // fmt subscriber and returns; any OTel setup error degrades to the same
+    // plain subscriber. The guard is held for the process lifetime and flushes
+    // the export pipeline on shutdown.
+    let _telemetry_guard = telemetry::init_telemetry(verbosity);
 
     let data_dir = dirs::state_dir()
         .or_else(dirs::data_local_dir)

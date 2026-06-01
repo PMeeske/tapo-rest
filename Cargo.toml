@@ -19,7 +19,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tapo = "0.8.12"
 tokio = { version = "1.52.1", features = ["macros", "rt-multi-thread", "fs"] }
-tower-http = { version = "0.6.8", features = ["cors"] }
+tower-http = { version = "0.6.8", features = ["cors", "trace"] }
 dirs = "6.0.0"
 paste = "1.0.15"
 axum-extra = { version = "0.12.6", features = ["typed-header"] }
@@ -30,3 +30,16 @@ chrono = { version = "0.4.44", default-features = false, features = [
 log = { version = "0.4.29", features = ["std"] }
 colored = "3.1.1"
 futures = "0.3"
+
+# Observability: distributed tracing + OTLP export (all fail-open at runtime).
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-opentelemetry = "0.28"
+opentelemetry = { version = "0.27", features = ["trace"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", default-features = false, features = [
+  "trace",
+  "grpc-tonic",
+] }
+opentelemetry-http = "0.27"
+http = "1"

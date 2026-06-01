@@ -11,6 +11,7 @@ use colored::Colorize;
 use log::info;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
+use tower_http::trace::TraceLayer;
 
 use crate::{
     config::{TapoConnectionInfos, cors_origins},
@@ -54,6 +55,23 @@ pub async fn serve(
         .allow_headers(AllowHeaders::any())
         .allow_origin(AllowOrigin::list(origins));
 
+    // Per-request tracing spans. The span is created for every HTTP request;
+    // when telemetry is enabled the global W3C propagator is installed and any
+    // incoming `traceparent` header is attached as the span's remote parent so
+    // the gateway's spans join the end-to-end trace. Best-effort: a no-op when
+    // telemetry is disabled or the header is absent.
+    let trace_layer = TraceLayer::new_for_http().make_span_with(
+        |request: &axum::http::Request<axum::body::Body>| {
+            let span = tracing::info_span!(
+                "http.request",
+                method = %request.method(),
+                uri = %request.uri(),
+            );
+            crate::telemetry::extract_remote_parent(request.headers(), &span);
+            span
+        },
+    );
+
     let (actions_router, actions_route_uris) = make_actions_router();
 
     let state = Arc::new(
@@ -89,6 +107,7 @@ pub async fn serve(
             get(|| async move { actions_route_uris.join("\n") }),
         )
         .layer(cors)
+        .layer(trace_layer)
         .with_state(state);
 
     let addr = format!("0.0.0.0:{port}");
